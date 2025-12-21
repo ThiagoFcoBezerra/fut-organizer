@@ -84,6 +84,9 @@ DATABASES = {
     )
 }
 
+db = DATABASES["default"]
+print(f"[DB] ENGINE={db.get('ENGINE')} NAME={db.get('NAME')} HOST={db.get('HOST')} PORT={db.get('PORT')}")
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
