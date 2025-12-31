@@ -1,6 +1,8 @@
+import secrets
 import uuid
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 User = settings.AUTH_USER_MODEL
 
@@ -16,15 +18,18 @@ class Group(models.Model):
 
 
 class GroupMember(models.Model):
-    ROLE_CHOICES = [("ADMIN", "Admin"), ("MEMBER", "Member")]
+    class Role(models.TextChoices):
+        ADMIN = "ADMIN", "Admin"
+        MEMBER = "MEMBER", "Member"
 
     group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="memberships")
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="memberships")
-    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default="MEMBER")
+    role = models.CharField(max_length=10, choices=Role.choices, default=Role.MEMBER)
     joined_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ("group", "user")
+
 
 
 class PlayerProfile(models.Model):
@@ -102,3 +107,31 @@ class ChatMessage(models.Model):
 
     class Meta:
         ordering = ["created_at"]
+
+def generate_invite_code():
+    # 8 chars base32-ish (sem caracteres confusos). Ajuste como quiser.
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(8))
+
+class GroupInvite(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    group = models.ForeignKey("core.Group", on_delete=models.CASCADE, related_name="invites")
+    code = models.CharField(max_length=12, unique=True, db_index=True, default=generate_invite_code)
+
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="invites_created")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    max_uses = models.PositiveIntegerField(default=50)
+    uses = models.PositiveIntegerField(default=0)
+
+    expires_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    def is_valid(self):
+        if not self.is_active:
+            return False
+        if self.expires_at and timezone.now() > self.expires_at:
+            return False
+        if self.uses >= self.max_uses:
+            return False
+        return True
